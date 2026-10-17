@@ -13,11 +13,20 @@ function escapeHtml(value) {
 function renderConversationalMarkdown(text) {
   if (!text) return "";
   const escaped = escapeHtml(text);
-  // Render fenced code blocks first
+  // Render fenced code blocks first with a 1-click Copy button
   const parts = escaped.split(/```([\s\S]*?)```/g);
   const renderedParts = parts.map((chunk, idx) => {
     if (idx % 2 === 1) {
-      return `<div class="code-snippet">${chunk.trim()}</div>`;
+      const codeBody = chunk.trim();
+      return `
+        <div class="code-block-wrap">
+          <div class="code-block-bar">
+            <span class="code-block-lang">CODE</span>
+            <button type="button" class="copy-code-btn" data-code="${codeBody}">Copy</button>
+          </div>
+          <div class="code-snippet">${codeBody}</div>
+        </div>
+      `;
     }
     // Inline formatting: **bold**, *italic*, `code`
     let html = chunk
@@ -139,7 +148,7 @@ function renderRecentTasksSidebar(tasks) {
 // Task Card Renderer (used in both Chat Stream and Task Inspector)
 // ---------------------------------------------------------------------------
 
-function renderTaskCard(task, showResumeButton = true) {
+function renderTaskCard(task, showResumeButton = true, expandTraceByDefault = false) {
   const actions = task.planned_actions || [];
   const verifications = task.verification_results || [];
   const liveTests = task.live_run_results || [];
@@ -300,18 +309,56 @@ function renderTaskCard(task, showResumeButton = true) {
     ? `<div class="conversational-reply">${renderConversationalMarkdown(task.assistant_response)}</div>`
     : `<div class="conversational-reply"><p>${escapeHtml(task.outcome_summary)}</p></div>`;
 
+  // Compact tool & proof pills (Hermes / OpenClaw style, unique Agent 911 aesthetic)
+  const nonChatActions = actions.filter((a) => a.capability_id !== "chat.respond");
+  const toolChipsHtml = nonChatActions
+    .slice(0, 4)
+    .map(
+      (a) =>
+        `<span class="tool-chip" title="${escapeHtml(a.description)}">⚡ ${escapeHtml(a.capability_id)}</span>`
+    )
+    .join("");
+
+  const verifPassed = verifications.filter((v) => v.status === "PASSED").length;
+  const livePassed = liveTests.filter((l) => l.status === "PASSED").length;
+  const proofChipsHtml = !isConversational
+    ? `
+      ${
+        verifications.length > 0
+          ? `<span class="proof-chip proof-chip-ok">✓ Verified (${verifPassed}/${verifications.length})</span>`
+          : ""
+      }
+      ${
+        liveTests.length > 0
+          ? `<span class="proof-chip proof-chip-ok">✓ Live-Tested (${livePassed}/${liveTests.length})</span>`
+          : ""
+      }
+    `
+    : `<span class="proof-chip">💬 Chat Reply</span>`;
+
+  const distilledBannerChip =
+    distilledSpec && distilledSpec.is_build_intent && distilledSpec.is_messy_input
+      ? `
+      <div class="distilled-compact-banner">
+        <span class="distilled-badge">🎯 BUILD SPEC</span>
+        <span class="distilled-text">${escapeHtml(distilledSpec.what_user_wants_to_build)}</span>
+      </div>
+    `
+      : "";
+
   return `
     <div data-card-task-id="${escapeHtml(task.task_id)}">
+      ${distilledBannerChip}
       ${replyHtml}
 
-      <details class="agent-trace-drawer" ${isConversational ? "" : "open"}>
+      <details class="agent-trace-drawer" ${expandTraceByDefault ? "open" : ""}>
         <summary>
-          <span>
-            <strong>Agent Execution &amp; Verification Trace</strong>
-            &bull; Mode: <code>${escapeHtml(task.interaction_mode || "task_execution")}</code>
-            &bull; ${actions.length} step(s)
-          </span>
-          <span class="badge badge-${escapeHtml(task.final_outcome)}">Outcome: ${escapeHtml(task.final_outcome)}</span>
+          <div class="trace-pill-row">
+            ${toolChipsHtml}
+            ${proofChipsHtml}
+            <span class="trace-toggle-hint">Inspect Trace ▸</span>
+          </div>
+          <span class="badge badge-${escapeHtml(task.final_outcome)}">${escapeHtml(task.final_outcome)}</span>
         </summary>
 
         <div class="task-card">
@@ -374,9 +421,13 @@ function appendChatMessage(role, headerText, metaText, bodyHtml) {
   const stream = document.getElementById("chat-stream");
   const msg = document.createElement("div");
   msg.className = `chat-msg ${role === "user" ? "user-msg" : "assistant-msg"}`;
+  const authorMarkup =
+    role === "user"
+      ? `<span class="msg-author">${escapeHtml(headerText)}</span>`
+      : `<div class="agent-avatar-chip"><span class="avatar-dot"></span><span class="msg-author">${escapeHtml(headerText)}</span></div>`;
   msg.innerHTML = `
     <div class="msg-header">
-      <span class="msg-author">${escapeHtml(headerText)}</span>
+      ${authorMarkup}
       <span class="msg-meta">${escapeHtml(metaText)}</span>
     </div>
     <div class="msg-body">${bodyHtml}</div>
@@ -384,7 +435,25 @@ function appendChatMessage(role, headerText, metaText, bodyHtml) {
   stream.appendChild(msg);
   stream.scrollTop = stream.scrollHeight;
   bindResumeButtons(msg);
+  bindCopyCodeButtons(msg);
   return msg;
+}
+
+function bindCopyCodeButtons(rootEl) {
+  rootEl.querySelectorAll(".copy-code-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const raw = btn.getAttribute("data-code") || "";
+      try {
+        await navigator.clipboard.writeText(raw);
+        btn.textContent = "Copied ✓";
+        setTimeout(() => {
+          btn.textContent = "Copy";
+        }, 1500);
+      } catch (_e) {
+        btn.textContent = "Copied";
+      }
+    });
+  });
 }
 
 function bindResumeButtons(rootEl) {
@@ -399,9 +468,9 @@ function bindResumeButtons(rootEl) {
         });
         appendChatMessage(
           "assistant",
-          "Agent 911 Orchestrator (Resumed Task)",
+          "Agent 911",
           `${resumed.task_id} • ${resumed.final_outcome}`,
-          renderTaskCard(resumed)
+          renderTaskCard(resumed, true, false)
         );
         await refreshSystemStatus();
       } catch (err) {
@@ -421,17 +490,19 @@ async function submitChatInstruction(instructionText) {
   const inputEl = document.getElementById("chat-input");
   const submitBtn = document.getElementById("chat-submit-btn");
   const statusEl = document.getElementById("composer-status");
+  const popover = document.getElementById("distill-preview-popover");
+  if (popover) popover.classList.add("hidden");
 
   appendChatMessage(
     "user",
-    "User Instruction",
+    "You",
     new Date().toLocaleTimeString(),
     `<p>${escapeHtml(instruction)}</p>`
   );
 
   inputEl.value = "";
   submitBtn.disabled = true;
-  statusEl.textContent = "Executing task lifecycle (Planning -> Execution -> Verification -> Live Run Testing)...";
+  statusEl.textContent = "Agent 911 is thinking & executing...";
 
   try {
     const task = await apiRequest("/api/chat", {
@@ -440,9 +511,9 @@ async function submitChatInstruction(instructionText) {
     });
     appendChatMessage(
       "assistant",
-      "Agent 911 Orchestrator",
-      `${task.task_id} • ${task.final_outcome}`,
-      renderTaskCard(task)
+      "Agent 911",
+      `${task.interaction_mode === "conversational" ? "Chat" : "Build & Execute"} • ${task.task_id}`,
+      renderTaskCard(task, true, false)
     );
     await refreshSystemStatus();
   } catch (err) {
@@ -454,7 +525,7 @@ async function submitChatInstruction(instructionText) {
     );
   } finally {
     submitBtn.disabled = false;
-    statusEl.textContent = "Ready • Press Enter to execute (Shift+Enter for newline)";
+    statusEl.textContent = "Ready • Enter to send";
   }
 }
 
@@ -521,8 +592,9 @@ async function inspectTaskById(taskId) {
         </div>
       `
         : "";
-    detail.innerHTML = renderTaskCard(task, true) + logsHtml;
+    detail.innerHTML = renderTaskCard(task, true, true) + logsHtml;
     bindResumeButtons(detail);
+    bindCopyCodeButtons(detail);
   } catch (err) {
     detail.innerHTML = `<div class="empty-hint">Failed to load task: ${escapeHtml(err.message)}</div>`;
   }
@@ -1051,6 +1123,95 @@ document.addEventListener("DOMContentLoaded", () => {
   // Chat composer
   const chatForm = document.getElementById("chat-form");
   const chatInput = document.getElementById("chat-input");
+  const initialStreamMarkup = document.getElementById("chat-stream").innerHTML;
+
+  function bindQuickPromptButtons(root = document) {
+    root.querySelectorAll(".quick-prompt-btn").forEach((btn) => {
+      if (btn.dataset.boundQuick === "1") return;
+      btn.dataset.boundQuick = "1";
+      btn.addEventListener("click", () => {
+        const prompt = btn.getAttribute("data-prompt");
+        switchTab("chat");
+        submitChatInstruction(prompt);
+      });
+    });
+  }
+  bindQuickPromptButtons(document);
+
+  const newChatBtn = document.getElementById("new-chat-btn");
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", () => {
+      switchTab("chat");
+      const stream = document.getElementById("chat-stream");
+      stream.innerHTML = initialStreamMarkup;
+      bindQuickPromptButtons(stream);
+      const pop = document.getElementById("distill-preview-popover");
+      if (pop) pop.classList.add("hidden");
+    });
+  }
+
+  const distillPreviewBtn = document.getElementById("distill-preview-btn");
+  const distillPopover = document.getElementById("distill-preview-popover");
+  if (distillPreviewBtn && distillPopover) {
+    distillPreviewBtn.addEventListener("click", async () => {
+      let rawText = chatInput.value.trim();
+      if (!rawText) {
+        rawText =
+          "uhh hey so like i'm trying to make a pyhton script maybe call it price_calc or something in billing/ folder... basically it needs to calculate tax and apply discount, oh and also make a config json in billing/rates.json!!";
+        chatInput.value = rawText;
+      }
+      distillPreviewBtn.disabled = true;
+      distillPreviewBtn.textContent = "✨ Distilling...";
+      try {
+        const spec = await apiRequest("/api/distill", {
+          method: "POST",
+          body: JSON.stringify({ instruction: rawText }),
+        });
+        const fns = (spec.extracted_functions || []).map((f) => `<code>${escapeHtml(f)}()</code>`).join(", ");
+        const arts = (spec.target_artifacts || [])
+          .map((a) => `<code>${escapeHtml(a.path)}</code> <span class="mono" style="opacity:0.7">(${escapeHtml(a.artifact_type)})</span>`)
+          .join(", ");
+        const ambs = (spec.ambiguities_resolved || [])
+          .map((a) => `<li>${escapeHtml(a)}</li>`)
+          .join("");
+        distillPopover.innerHTML = `
+          <div class="distill-popover-header">
+            <div>
+              <span class="distilled-badge">✨ CONCRETE BUILD SPECIFICATION</span>
+              <span class="mono" style="font-size:11px; color:var(--text-secondary); margin-left:8px;">
+                ${spec.is_messy_input ? "Messy Writing Distilled" : "Clean Spec"} • ${spec.is_build_intent ? "Build Intent" : "Conversational / Other"}
+              </span>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-primary btn-sm" id="popover-build-now-btn">Build Now ↗</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="popover-close-btn">&times;</button>
+            </div>
+          </div>
+          <div class="distill-popover-body">
+            <div><strong>What You Want to Build:</strong> ${escapeHtml(spec.what_user_wants_to_build)}</div>
+            ${arts ? `<div><strong>Target Artifacts:</strong> ${arts}</div>` : ""}
+            ${fns ? `<div><strong>Identified Functions:</strong> ${fns}</div>` : ""}
+            <div><strong>Concrete Plan:</strong> ${escapeHtml(spec.concrete_instruction)}</div>
+            ${ambs ? `<ul class="distill-amb-list">${ambs}</ul>` : ""}
+          </div>
+        `;
+        distillPopover.classList.remove("hidden");
+        document.getElementById("popover-close-btn").addEventListener("click", () => {
+          distillPopover.classList.add("hidden");
+        });
+        document.getElementById("popover-build-now-btn").addEventListener("click", () => {
+          distillPopover.classList.add("hidden");
+          submitChatInstruction(chatInput.value);
+        });
+      } catch (err) {
+        alert(`Distill preview error: ${err.message}`);
+      } finally {
+        distillPreviewBtn.disabled = false;
+        distillPreviewBtn.textContent = "✨ Distill Preview";
+      }
+    });
+  }
+
   chatForm.addEventListener("submit", (e) => {
     e.preventDefault();
     submitChatInstruction(chatInput.value);

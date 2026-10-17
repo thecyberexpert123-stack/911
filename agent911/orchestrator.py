@@ -719,32 +719,27 @@ class Agent911Orchestrator:
             and task.distilled_spec.is_build_intent
         ):
             spec = task.distilled_spec
-            distill_lines = [
-                f"**Distilled Build Objective:** {spec.what_user_wants_to_build}",
-                f"**Concrete Plan:** {spec.concrete_instruction}",
-            ]
-            if spec.extracted_functions:
-                distill_lines.append(
-                    "**Identified Functions to Build:** "
-                    + ", ".join(f"`{fn}()`" for fn in spec.extracted_functions)
-                )
-            if spec.ambiguities_resolved:
-                distill_lines.append(
-                    "**Resolved from Messy Writing:** "
-                    + "; ".join(spec.ambiguities_resolved[:4])
-                )
-            parts.append("\n".join(distill_lines))
+            fn_note = (
+                f" with functions {', '.join(f'`{fn}()`' for fn in spec.extracted_functions)}"
+                if spec.extracted_functions
+                else ""
+            )
+            parts.append(
+                f"I understood what you want to build (**Distilled Build Objective:** {spec.what_user_wants_to_build}{fn_note}) and put it together for you:"
+            )
 
         for act in task.planned_actions:
             out = task.relevant_outputs.get(act.step_id)
             cid = act.capability_id
             if cid == "chat.respond" and isinstance(out, dict) and out.get("reply"):
                 parts.append(str(out["reply"]))
+            elif cid == "fs.mkdir" and isinstance(out, dict):
+                p = out.get("path", act.parameters.get("path", "directory"))
+                parts.append(f"Prepared workspace directory **`{p}/`**.")
             elif cid in ("fs.write", "fs.update") and isinstance(out, dict):
                 p = out.get("path", act.parameters.get("path", "file"))
-                sz = out.get("bytes_written", "")
-                verb = "Created and wrote" if cid == "fs.write" else "Updated"
-                parts.append(f"{verb} **`{p}`**" + (f" ({sz} bytes)." if sz != "" else "."))
+                verb = "Created" if cid == "fs.write" else "Updated"
+                parts.append(f"{verb} **`{p}`**.")
             elif cid == "fs.read" and isinstance(out, dict):
                 p = out.get("path", act.parameters.get("path", "file"))
                 content = str(out.get("content", ""))
@@ -755,7 +750,7 @@ class Agent911Orchestrator:
                 entries = out.get("entries", [])
                 names = [e.get("name", str(e)) if isinstance(e, dict) else str(e) for e in entries[:25]]
                 parts.append(
-                    f"Listed directory **`{p}`** ({len(entries)} entries): "
+                    f"Here are the files in **`{p}`** ({len(entries)} entries): "
                     + (", ".join(f"`{n}`" for n in names) if names else "empty")
                 )
             elif cid == "project.inspect" and isinstance(out, dict):
@@ -763,7 +758,7 @@ class Agent911Orchestrator:
                 manifests = out.get("manifests", [])
                 tests = out.get("test_files", [])
                 parts.append(
-                    f"I inspected the workspace project structure: found **{len(pfiles)} project files**, "
+                    f"I inspected your workspace: found **{len(pfiles)} project files**, "
                     f"**{len(manifests)} manifest(s)** ({', '.join(f'`{m}`' for m in manifests[:5]) or 'none'}), "
                     f"and **{len(tests)} test file(s)** ({', '.join(f'`{t}`' for t in tests[:5]) or 'none'})."
                 )
@@ -771,30 +766,30 @@ class Agent911Orchestrator:
                 passed = out.get("passed", act.status == ActionStatus.COMPLETED)
                 runner = out.get("runner", "test runner")
                 parts.append(
-                    f"Executed test suite via **`{runner}`**: **{'PASSED' if passed else 'FAILED'}**."
+                    f"Ran the test suite with **`{runner}`** — all tests **{'passed' if passed else 'failed'}**."
                 )
             elif cid == "cmd.run" and isinstance(out, dict):
                 rc = out.get("exit_code", 0)
                 stdout = str(out.get("stdout", "")).strip()
-                msg = f"Executed command (exit code `{rc}`)."
+                msg = f"Ran command (exit code `{rc}`)."
                 if stdout:
                     msg += f"\n```\n{stdout[:400]}\n```"
                 parts.append(msg)
             elif cid == "memory.store" and isinstance(out, dict):
                 k = out.get("key", act.parameters.get("key", ""))
                 v = out.get("content", act.parameters.get("content", ""))
-                parts.append(f"Saved to persistent SQLite memory: **`{k}`** = `{v}`.")
+                parts.append(f"I've saved **`{k}`** = `{v}` to memory.")
             elif cid == "memory.retrieve" and isinstance(out, dict):
                 recs = out.get("records", [])
                 if recs:
                     lines = [f"- **{r.get('key')}**: {r.get('content')}" for r in recs[:8]]
-                    parts.append("Retrieved from persistent memory:\n" + "\n".join(lines))
+                    parts.append("Here is what I found in memory:\n" + "\n".join(lines))
                 else:
-                    parts.append("No matching records were found in persistent memory.")
+                    parts.append("I didn't find any matching records in memory.")
             elif cid == "capability.develop" and isinstance(out, dict):
                 cap_id = out.get("capability_id", act.parameters.get("capability_id", ""))
                 parts.append(
-                    f"Developed, verified, live-tested, and registered new capability **`{cap_id}`**."
+                    f"I've built, verified, and registered the new capability **`{cap_id}`**."
                 )
             elif out is not None and act.status == ActionStatus.COMPLETED:
                 parts.append(
@@ -805,17 +800,10 @@ class Agent911Orchestrator:
             if task.errors:
                 err = task.errors[-1]
                 parts.append(
-                    f"I encountered an issue while executing `{err.capability_id}` (`{err.error_type}`): {err.message}"
+                    f"I ran into an issue while executing `{err.capability_id}` (`{err.error_type}`): {err.message}"
                 )
             else:
                 parts.append(task.outcome_summary)
-        elif task.interaction_mode != "conversational":
-            verif_pass = sum(1 for v in task.verification_results if v.status.value == "PASSED")
-            live_pass = sum(1 for l in task.live_run_results if l.status.value == "PASSED")
-            parts.append(
-                f"\n*(Outcome: **{task.final_outcome.value}** — {verif_pass}/{len(task.verification_results)} Verification checks passed, "
-                f"{live_pass}/{len(task.live_run_results)} Live Run Tests passed.)*"
-            )
 
         task.assistant_response = "\n\n".join(parts)
 

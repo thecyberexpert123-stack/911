@@ -11,10 +11,16 @@
     <!-- Top Header -->
     <header class="topbar">
       <div class="brand">
-        <div class="brand-badge">911</div>
+        <div class="brand-badge">
+          <span class="brand-pulse"></span>
+          <span>911</span>
+        </div>
         <div>
-          <h1 class="brand-title">AGENT 911</h1>
-          <p class="brand-subtitle">Instruction-Driven, Self-Expanding AI Agent</p>
+          <div class="brand-title-row">
+            <h1 class="brand-title">AGENT 911</h1>
+            <span class="brand-tag">AUTONOMOUS COMMAND DECK</span>
+          </div>
+          <p class="brand-subtitle">Conversational AI • Messy-to-Concrete Build Synthesizer • Verified Execution</p>
         </div>
       </div>
 
@@ -29,8 +35,11 @@
         <div class="status-pill" id="memory-pill" title="SQLite Persistent Memories & Experiences">
           <span id="memory-count-label">0 Memories | 0 Experiences</span>
         </div>
+        <button class="btn btn-secondary btn-sm" id="new-chat-btn" type="button" title="Clear stream and start a fresh chat view">
+          + New Chat
+        </button>
         <button class="btn btn-secondary btn-sm" id="open-config-btn" type="button">
-          Model &amp; Config
+          ⚙ Runtime
         </button>
       </div>
     </header>
@@ -39,66 +48,70 @@
     <div class="main-layout">
       <!-- Left Sidebar Navigation & Quick State -->
       <aside class="sidebar">
+        <div class="sidebar-group-label">WORKSPACE SURFACES</div>
         <nav class="nav-tabs" role="tablist">
           <button class="nav-tab active" data-tab="chat" type="button">
-            Chat &amp; Task Execution
+            <span class="nav-icon">💬</span>
+            <span>Agent Chat</span>
           </button>
           <button class="nav-tab" data-tab="tasks" type="button">
-            Execution History
+            <span class="nav-icon">📜</span>
+            <span>Mission Archive</span>
           </button>
           <button class="nav-tab" data-tab="capabilities" type="button">
-            Capabilities &amp; Growth
+            <span class="nav-icon">🧩</span>
+            <span>Skill Foundry</span>
           </button>
           <button class="nav-tab" data-tab="memory" type="button">
-            Memory &amp; Experience
+            <span class="nav-icon">🧠</span>
+            <span>Neural Vault</span>
           </button>
           <button class="nav-tab" data-tab="models" type="button">
-            Models &amp; Providers
+            <span class="nav-icon">🛰️</span>
+            <span>Model Matrix</span>
           </button>
           <button class="nav-tab" data-tab="improvements" type="button">
-            Adaptive Self-Improvement
+            <span class="nav-icon">⚡</span>
+            <span>Self-Evolution</span>
           </button>
         </nav>
 
         <div class="sidebar-section">
           <div class="sidebar-section-header">
-            <span>Chat &amp; Task Quick Prompts</span>
+            <span>1-Click Launchers</span>
           </div>
           <div class="quick-prompts">
             <button class="quick-prompt-btn" data-prompt="Hello! Who are you and what can you do?">
-              💬 Say Hello &amp; Ask About Capabilities
+              💬 Say Hello &amp; Capabilities
             </button>
             <button class="quick-prompt-btn" data-prompt="My name is Aryan and my role is AI Engineer">
-              🧠 Introduce Yourself (Save to Memory)
+              🧠 Introduce Yourself (Memory)
             </button>
             <button class="quick-prompt-btn" data-prompt="What is my name and what do you remember about me?">
-              🔍 Ask What Agent 911 Remembers
-            </button>
-            <button class="quick-prompt-btn" data-prompt="Inspect project structure, manifests, entry points, and tests">
-              📂 Inspect Project Structure
+              🔍 Recall Saved Context
             </button>
             <button class="quick-prompt-btn" data-prompt="uhh hey so like i'm trying to make a python script maybe call it price_calc or something in billing/ folder... basically it needs to calculate tax and apply discount, oh and also make a config json in billing/rates.json!!">
-              🧩 Build from Messy User Writing
+              🧩 Build from Messy Writing
             </button>
-            <button class="quick-prompt-btn" data-prompt="Write a Python file 'fibonacci_tool.py' with a function 'compute_fibonacci'">
-              🐍 Create &amp; Live-Test Python Module
+            <button class="quick-prompt-btn" data-prompt="yo can u pls whip up a password generator tool in python that can generate password and check strength, and also make a test file for it and run unittest? idk just make it work">
+              🔐 Messy Build + Unit Tests
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Inspect project structure, manifests, entry points, and tests">
+              📂 Inspect Workspace
             </button>
             <button class="quick-prompt-btn" data-prompt="Develop capability 'text.metrics' to count words, lines, and characters">
-              🛠️ Grow Capability: text.metrics
-            </button>
-            <button class="quick-prompt-btn" data-prompt="Run automated tests on 'tests' with unittest">
-              ✅ Run Automated Test Suite
+              🛠️ Grow Skill: text.metrics
             </button>
           </div>
         </div>
 
         <div class="sidebar-section sidebar-tasks-mini">
           <div class="sidebar-section-header">
-            <span>Recent Tasks (SQLite)</span>
-            <button class="btn-link" id="refresh-sidebar-btn" type="button">Refresh</button>
+            <span>Session Activity</span>
+            <button class="btn-link" id="refresh-sidebar-btn" type="button">Sync</button>
           </div>
           <div id="recent-tasks-list" class="recent-tasks-list">
-            <div class="empty-hint">No tasks executed yet.</div>
+            <div class="empty-hint">No sessions recorded yet.</div>
           </div>
         </div>
       </aside>
@@ -108,34 +121,63 @@
         <!-- TAB 1: Chat & Task Console -->
         <section class="tab-panel active" id="tab-chat">
           <div class="chat-stream" id="chat-stream">
-            <div class="chat-msg assistant-msg">
+            <div class="chat-msg assistant-msg welcome-hero-card">
               <div class="msg-header">
-                <span class="msg-author">Agent 911</span>
-                <span class="msg-meta">Conversational AI Agent • Autonomous Execution • Verification + Live Run Testing</span>
+                <div class="agent-avatar-chip">
+                  <span class="avatar-dot"></span>
+                  <span class="msg-author">Agent 911</span>
+                </div>
+                <span class="msg-meta">Online • Conversational &amp; Autonomous Build Mode</span>
               </div>
               <div class="msg-body">
-                <p>
-                  Hello! I'm <strong>Agent 911</strong>. You can talk to me like a normal chatbot
-                  (ask questions, share facts for me to remember in SQLite, or discuss your project)
-                  <strong>and</strong> give me concrete instructions to execute in your workspace
-                  (creating/editing files, inspecting projects, running commands &amp; tests, or growing new capabilities).
-                </p>
+                <div class="conversational-reply">
+                  <p>
+                    Welcome to the <strong>Agent 911 Command Deck</strong>. Talk to me naturally like a regular assistant, paste messy brainstorms to turn into working software, or instruct me to inspect, build, and test code in your workspace.
+                  </p>
+                </div>
+                <div class="hero-starter-grid">
+                  <button type="button" class="hero-starter-card quick-prompt-btn" data-prompt="Hello! Who are you and how do you work?">
+                    <span class="starter-badge">CHAT</span>
+                    <strong>Natural Conversation</strong>
+                    <span>Chat, ask math/coding questions, or teach me preferences saved in SQLite.</span>
+                  </button>
+                  <button type="button" class="hero-starter-card quick-prompt-btn" data-prompt="uhh hey so like i'm trying to make a python script maybe call it price_calc or something in billing/ folder... basically it needs to calculate tax and apply discount, oh and also make a config json in billing/rates.json!!">
+                    <span class="starter-badge starter-badge-amber">MESSY TO BUILD</span>
+                    <strong>Build from Messy Writing</strong>
+                    <span>Distill informal notes into concrete files, functions, &amp; configs automatically.</span>
+                  </button>
+                  <button type="button" class="hero-starter-card quick-prompt-btn" data-prompt="Inspect project structure, manifests, entry points, and tests">
+                    <span class="starter-badge starter-badge-emerald">WORKSPACE</span>
+                    <strong>Inspect &amp; Execute</strong>
+                    <span>Analyze project files, run tests, or grow new capabilities on the fly.</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
+          <div id="distill-preview-popover" class="distill-preview-popover hidden"></div>
+
           <form class="chat-composer" id="chat-form">
-            <textarea
-              id="chat-input"
-              rows="2"
-              placeholder="Message Agent 911 — chat naturally (e.g., 'Hello! What can you do?') or give an instruction (e.g., 'Write a Python file calc.py with a function add')..."
-              required
-            ></textarea>
-            <div class="composer-actions">
-              <span class="composer-hint" id="composer-status">Ready • Press Enter to send (Shift+Enter for newline)</span>
-              <button class="btn btn-primary" id="chat-submit-btn" type="submit">
-                Send Message
-              </button>
+            <div class="composer-shell">
+              <textarea
+                id="chat-input"
+                rows="2"
+                placeholder="Chat naturally, paste messy build ideas, or give a workspace instruction..."
+                required
+              ></textarea>
+              <div class="composer-actions">
+                <div class="composer-left-tools">
+                  <button class="btn btn-ghost btn-sm" id="distill-preview-btn" type="button" title="Preview how Agent 911 distills your writing into a concrete build spec">
+                    ✨ Distill Preview
+                  </button>
+                  <span class="composer-hint" id="composer-status">Ready • Enter to send</span>
+                </div>
+                <button class="btn btn-primary" id="chat-submit-btn" type="submit">
+                  <span>Send</span>
+                  <span class="send-arrow">↗</span>
+                </button>
+              </div>
             </div>
           </form>
         </section>
