@@ -713,6 +713,28 @@ class Agent911Orchestrator:
             task.interaction_mode = "task_execution"
 
         parts: List[str] = []
+        if (
+            task.distilled_spec is not None
+            and task.distilled_spec.is_messy_input
+            and task.distilled_spec.is_build_intent
+        ):
+            spec = task.distilled_spec
+            distill_lines = [
+                f"**Distilled Build Objective:** {spec.what_user_wants_to_build}",
+                f"**Concrete Plan:** {spec.concrete_instruction}",
+            ]
+            if spec.extracted_functions:
+                distill_lines.append(
+                    "**Identified Functions to Build:** "
+                    + ", ".join(f"`{fn}()`" for fn in spec.extracted_functions)
+                )
+            if spec.ambiguities_resolved:
+                distill_lines.append(
+                    "**Resolved from Messy Writing:** "
+                    + "; ".join(spec.ambiguities_resolved[:4])
+                )
+            parts.append("\n".join(distill_lines))
+
         for act in task.planned_actions:
             out = task.relevant_outputs.get(act.step_id)
             cid = act.capability_id
@@ -861,3 +883,13 @@ class Agent911Orchestrator:
     def list_self_improvement_runs(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Return persisted controlled self-improvement run records."""
         return self.memory_store.list_self_improvement_runs(limit=limit)
+
+    def distill_instruction(self, raw_text: str) -> Dict[str, Any]:
+        """
+        Distill messy, informal, or unstructured user writings into a concrete
+        DistilledBuildSpec dictionary identifying what the user wants to build.
+        """
+        from agent911.capabilities.distill_ops import InstructionDistiller
+
+        return InstructionDistiller.distill(raw_text).to_dict()
+

@@ -242,6 +242,18 @@ function createAppServer(options = {}) {
         return sendJson(res, result.ok ? 200 : 400, result);
       }
 
+      if (pathname === "/api/distill" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const result = await callPythonBridge(
+          {
+            action: "distill",
+            instruction: body.instruction || body.text,
+          },
+          options
+        );
+        return sendJson(res, result.ok ? 200 : 400, result);
+      }
+
       if (pathname === "/api/chat" && req.method === "POST") {
         const body = await readJsonBody(req);
         const result = await callPythonBridge(

@@ -201,6 +201,17 @@ def handle_request(req: Dict[str, Any]) -> Dict[str, Any]:
             )
             return {"ok": True, "data": report.to_dict()}
 
+        if action == "distill":
+            raw_text = str(req.get("instruction") or req.get("text") or "").strip()
+            if not raw_text:
+                return {
+                    "ok": False,
+                    "error": "Instruction text cannot be empty.",
+                    "error_type": "ValueError",
+                }
+            spec_dict = orchestrator.distill_instruction(raw_text)
+            return {"ok": True, "data": spec_dict}
+
         if action == "chat":
             instruction = str(req.get("instruction", "")).strip()
             if not instruction:

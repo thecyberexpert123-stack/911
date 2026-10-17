@@ -15,9 +15,11 @@ from agent911.models import (
     FailureRootCauseCategory,
     ImprovementProposal,
     ImprovementStatus,
+    LiveTestStatus,
     PlannedAction,
     ProblemSolvingStrategy,
     TaskOutcome,
+    VerificationStatus,
     new_id,
 )
 from agent911.orchestrator import Agent911Orchestrator
@@ -587,6 +589,51 @@ class TestPhase3AdaptiveIntelligence(unittest.TestCase):
         self.assertEqual(t_exec.interaction_mode, "task_execution")
         self.assertIn("greeter.py", t_exec.assistant_response)
         self.assertTrue((self.workspace / "greeter.py").exists())
+
+    def test_10_distill_concrete_instructions_from_messy_user_writings_and_build(self) -> None:
+        """
+        Verify Agent 911 distills messy, informal, typo-laden user writings into concrete
+        build specifications (identifying folders, missing file extensions, multiple functions,
+        configs, and unit tests) and builds + verifies + live-tests the artifacts.
+        """
+        # 1. Messy stream-of-consciousness prompt with filler, typo ('pyhton'), extensionless name ('price_calc'),
+        #    folder ('billing/'), natural-language behaviors ('calculate tax and apply discount'), and config json
+        messy_prompt_1 = (
+            "uhh hey so like i'm trying to make a pyhton script maybe call it price_calc "
+            "or something in billing/ folder... basically it needs to calculate tax and "
+            "apply discount, oh and also make a config json in billing/rates.json!!"
+        )
+        t_messy1 = self.orchestrator.execute_task(messy_prompt_1)
+        self.assertEqual(t_messy1.final_outcome, TaskOutcome.SUCCESS)
+        self.assertIsNotNone(t_messy1.distilled_spec)
+        self.assertTrue(t_messy1.distilled_spec.is_messy_input)
+        self.assertTrue(t_messy1.distilled_spec.is_build_intent)
+        self.assertIn("billing/price_calc.py", t_messy1.distilled_spec.what_user_wants_to_build)
+        self.assertIn("calculate_tax", t_messy1.distilled_spec.extracted_functions)
+        self.assertIn("apply_discount", t_messy1.distilled_spec.extracted_functions)
+        self.assertGreaterEqual(len(t_messy1.distilled_spec.ambiguities_resolved), 2)
+
+        # Both artifacts must exist and pass Verification & Live Run Testing
+        self.assertTrue((self.workspace / "billing" / "price_calc.py").exists())
+        self.assertTrue((self.workspace / "billing" / "rates.json").exists())
+        self.assertTrue(all(v.status == VerificationStatus.PASSED for v in t_messy1.verification_results))
+        self.assertTrue(any(l.status == LiveTestStatus.PASSED for l in t_messy1.live_run_results))
+
+        # 2. Messy prompt with NO filename at all + companion test file synthesis + running unittest
+        messy_prompt_2 = (
+            "yo can u pls whip up a password generator tool in python that can "
+            "generate password and check strength, and also make a test file for it "
+            "and run unittest? idk just make it work"
+        )
+        t_messy2 = self.orchestrator.execute_task(messy_prompt_2)
+        self.assertEqual(t_messy2.final_outcome, TaskOutcome.SUCCESS)
+        self.assertIsNotNone(t_messy2.distilled_spec)
+        self.assertTrue(t_messy2.distilled_spec.is_messy_input)
+        self.assertTrue(t_messy2.distilled_spec.is_build_intent)
+        self.assertTrue((self.workspace / "password_generator.py").exists())
+        self.assertTrue((self.workspace / "test_password_generator.py").exists())
+        self.assertIn("generate_password", t_messy2.distilled_spec.extracted_functions)
+        self.assertIn("check_strength", t_messy2.distilled_spec.extracted_functions)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,15 @@ def _format_task_report(task: TaskState) -> str:
     lines.append(f"Interaction Mode     : {task.interaction_mode}")
     lines.append(f"Final Outcome        : {task.final_outcome.value}")
     lines.append(f"Outcome Summary      : {task.outcome_summary}")
+    if task.distilled_spec and task.distilled_spec.is_build_intent:
+        lines.append("\n--- Distilled Build Specification (From User Writing) ---")
+        lines.append(f"  What User Wants to Build : {task.distilled_spec.what_user_wants_to_build}")
+        lines.append(f"  Messy Input Distilled    : {task.distilled_spec.is_messy_input}")
+        lines.append(f"  Concrete Instruction     : {task.distilled_spec.concrete_instruction}")
+        if task.distilled_spec.extracted_functions:
+            lines.append(f"  Identified Functions     : {', '.join(task.distilled_spec.extracted_functions)}")
+        if task.distilled_spec.ambiguities_resolved:
+            lines.append(f"  Ambiguities Resolved     : {'; '.join(task.distilled_spec.ambiguities_resolved)}")
     if task.assistant_response:
         lines.append(f"\n--- Agent 911 Conversational Response ---\n{task.assistant_response}")
 
@@ -125,6 +134,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Talk conversationally with Agent 911 or execute instructions in single-turn or interactive REPL mode",
     )
     chat_parser.add_argument("message", nargs="?", help="Message or instruction (omit for interactive REPL)", default=None)
+
+    # distill
+    distill_parser = subparsers.add_parser(
+        "distill",
+        help="Distill messy, informal user writing into a concrete build specification (and optionally execute it)",
+    )
+    distill_parser.add_argument("instruction", help="Messy or informal user writing to distill")
+    distill_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Immediately build and evaluate the distilled concrete specification",
+    )
 
     # resume
     resume_parser = subparsers.add_parser(
@@ -354,6 +375,37 @@ def main(argv: Optional[List[str]] = None) -> int:
                 break
             task = orchestrator.execute_task(user_msg)
             print(f"\nAgent 911 [{task.interaction_mode} | {task.final_outcome.value}] >\n{task.assistant_response}")
+        return 0
+
+    if cmd == "distill":
+        if args.execute:
+            task = orchestrator.execute_task(args.instruction)
+            if args.json:
+                print(json.dumps(task.to_dict(), indent=2))
+            else:
+                print(_format_task_report(task))
+            return 0 if task.final_outcome == TaskOutcome.SUCCESS else 1
+
+        spec_dict = orchestrator.distill_instruction(args.instruction)
+        if args.json:
+            print(json.dumps(spec_dict, indent=2))
+        else:
+            print("=== AGENT 911 DISTILLED CONCRETE SPECIFICATION ===")
+            print(f"Raw User Writing         : {spec_dict['raw_input']}")
+            print(f"Messy Input Detected     : {spec_dict['is_messy_input']}")
+            print(f"Build Intent Detected    : {spec_dict['is_build_intent']}")
+            print(f"What User Wants to Build : {spec_dict['what_user_wants_to_build']}")
+            print(f"Concrete Instruction     : {spec_dict['concrete_instruction']}")
+            if spec_dict.get("target_artifacts"):
+                print("\nTarget Artifacts:")
+                for art in spec_dict["target_artifacts"]:
+                    print(
+                        f"  - {art['path']} ({art['artifact_type']}) | functions={art.get('functions', [])}"
+                    )
+            if spec_dict.get("ambiguities_resolved"):
+                print("\nAmbiguities Resolved:")
+                for amb in spec_dict["ambiguities_resolved"]:
+                    print(f"  * {amb}")
         return 0
 
     if cmd == "resume":

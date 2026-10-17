@@ -309,5 +309,32 @@ describe("Agent 911 Node.js Chat Interface Server", () => {
     assert.equal(b3.ok, true);
     assert.equal(b3.data.interaction_mode, "task_execution");
     assert.ok(b3.data.assistant_response.includes("project files"));
+
+    // 4. Distill and build from messy user writing via /api/distill and /api/chat
+    const messyWriting =
+      "uhh hey so like i'm trying to make a pyhton script maybe call it price_calc or something in billing/ folder... basically it needs to calculate tax and apply discount, oh and also make a config json in billing/rates.json!!";
+    const rDistill = await fetch(`${baseUrl}/api/distill`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: messyWriting }),
+    });
+    assert.equal(rDistill.status, 200);
+    const bDistill = await rDistill.json();
+    assert.equal(bDistill.ok, true);
+    assert.equal(bDistill.data.is_messy_input, true);
+    assert.equal(bDistill.data.is_build_intent, true);
+    assert.ok(bDistill.data.what_user_wants_to_build.includes("billing/price_calc.py"));
+
+    const rBuild = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: messyWriting }),
+    });
+    assert.equal(rBuild.status, 200);
+    const bBuild = await rBuild.json();
+    assert.equal(bBuild.ok, true);
+    assert.equal(bBuild.data.final_outcome, "SUCCESS");
+    assert.equal(bBuild.data.distilled_spec.is_messy_input, true);
+    assert.ok(bBuild.data.assistant_response.includes("Distilled Build Objective"));
   });
 });

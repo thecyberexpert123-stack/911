@@ -8,6 +8,7 @@ from typing import Optional
 from agent911.capabilities.base import Capability, CapabilityContext
 from agent911.capabilities.chat_ops import ChatRespondCapability
 from agent911.capabilities.command_execution import RunCommandCapability
+from agent911.capabilities.distill_ops import DistillInstructionCapability, InstructionDistiller
 from agent911.capabilities.experience_ops import (
     RecordExperienceCapability,
     RetrieveExperienceCapability,
@@ -67,6 +68,7 @@ def register_builtin_capabilities(
         QueryModelCapability(),
         DevelopCapability(),
         ChatRespondCapability(),
+        DistillInstructionCapability(),
     ]
     for cap in builtins:
         registry.register(cap, allow_replace=True)

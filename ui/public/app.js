@@ -263,6 +263,38 @@ function renderTaskCard(task, showResumeButton = true) {
     `
       : "";
 
+  const distilledSpec = task.distilled_spec || null;
+  const distilledHtml =
+    distilledSpec && distilledSpec.is_build_intent
+      ? `
+      <div class="task-section" style="border-left: 3px solid var(--accent); padding-left: 10px;">
+        <h4>Distilled Concrete Build Specification ${
+          distilledSpec.is_messy_input
+            ? `<span class="badge badge-PASSED" style="margin-left:6px;">DISTILLED FROM MESSY WRITING</span>`
+            : ""
+        }</h4>
+        <div style="margin-bottom: 4px;"><strong>What User Wants to Build:</strong> ${escapeHtml(distilledSpec.what_user_wants_to_build)}</div>
+        <div style="margin-bottom: 4px;"><strong>Concrete Instruction:</strong> ${escapeHtml(distilledSpec.concrete_instruction)}</div>
+        ${
+          (distilledSpec.extracted_functions || []).length > 0
+            ? `<div style="margin-bottom: 4px;"><strong>Identified Functions:</strong> ${(distilledSpec.extracted_functions || [])
+                .map((fn) => `<code>${escapeHtml(fn)}()</code>`)
+                .join(", ")}</div>`
+            : ""
+        }
+        ${
+          (distilledSpec.ambiguities_resolved || []).length > 0
+            ? `<div style="color: var(--text-secondary); font-size: 12px;"><strong>Ambiguities Resolved:</strong><ul style="padding-left:18px; margin-top:3px;">${(
+                distilledSpec.ambiguities_resolved || []
+              )
+                .map((a) => `<li>${escapeHtml(a)}</li>`)
+                .join("")}</ul></div>`
+            : ""
+        }
+      </div>
+    `
+      : "";
+
   const isConversational = task.interaction_mode === "conversational";
   const replyHtml = task.assistant_response
     ? `<div class="conversational-reply">${renderConversationalMarkdown(task.assistant_response)}</div>`
@@ -302,6 +334,8 @@ function renderTaskCard(task, showResumeButton = true) {
           <div style="color: var(--text-primary); font-weight: 500;">
             ${escapeHtml(task.outcome_summary)}
           </div>
+
+          ${distilledHtml}
 
           ${decisionsHtml}
 

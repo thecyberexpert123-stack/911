@@ -7,12 +7,14 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from agent911.capabilities.distill_ops import InstructionDistiller
 from agent911.capabilities.registry import CapabilityRegistry
 from agent911.config import AgentConfig
 from agent911.model_provider import ModelInterface, ModelProviderError
 from agent911.models import (
     ActionStatus,
     CapabilityAvailability,
+    DistilledBuildSpec,
     InstructionIntent,
     PlannedAction,
     ProblemSolvingStrategy,
@@ -57,10 +59,20 @@ class TaskPlanner:
             "instruction_memories", []
         )
 
+        # Always distill messy/informal user writings into a structured DistilledBuildSpec
+        distilled_spec = InstructionDistiller.distill(instruction)
+        task.distilled_spec = distilled_spec
+        if distilled_spec.is_messy_input and distilled_spec.is_build_intent:
+            task.decisions.append(
+                f"Distilled messy user writing into concrete build spec: {distilled_spec.what_user_wants_to_build}"
+            )
+
         # If caller supplied an explicit structured plan/requirements, honor it while still
         # extracting intent and applying experience lessons.
         if explicit_plan is not None:
-            intent = self._derive_heuristic_intent(instruction, experiences, memories)
+            intent = self._derive_heuristic_intent(
+                instruction, experiences, memories, distilled_spec=distilled_spec
+            )
             task.intent = intent
             task.interpreted_objective = intent.main_goal
             task.assumptions = list(intent.assumptions)
@@ -108,11 +120,15 @@ class TaskPlanner:
                 )
 
         if not used_model:
-            intent = self._derive_heuristic_intent(instruction, experiences, memories)
+            intent = self._derive_heuristic_intent(
+                instruction, experiences, memories, distilled_spec=distilled_spec
+            )
             task.intent = intent
             task.interpreted_objective = intent.main_goal
             task.assumptions = list(intent.assumptions)
-            actions, reqs = self._build_heuristic_plan(instruction, intent, experiences)
+            actions, reqs = self._build_heuristic_plan(
+                instruction, intent, experiences, distilled_spec=distilled_spec
+            )
             if explicit_requirements is not None:
                 reqs = [
                     TaskRequirement(
@@ -236,7 +252,11 @@ class TaskPlanner:
         instruction: str,
         experiences: List[Dict[str, Any]],
         memories: List[Dict[str, Any]],
+        distilled_spec: Optional[DistilledBuildSpec] = None,
     ) -> InstructionIntent:
+        if distilled_spec is None:
+            distilled_spec = InstructionDistiller.distill(instruction)
+
         lower = instruction.lower()
         reqs: List[str] = []
         outputs: List[str] = []
@@ -301,6 +321,32 @@ class TaskPlanner:
             caps.append("model.query")
             reqs.append("Query configured AI model provider.")
 
+        # Enrich intent from DistilledBuildSpec when messy user writing or informal build phrasing is detected
+        if distilled_spec.is_build_intent and (
+            distilled_spec.is_messy_input
+            or not caps
+            or len(distilled_spec.target_artifacts) > len(artifacts)
+        ):
+            for art in distilled_spec.target_artifacts:
+                art_path = art["path"]
+                if art["artifact_type"] == "directory":
+                    if "fs.mkdir" not in caps:
+                        caps.append("fs.mkdir")
+                else:
+                    if art_path not in artifacts:
+                        artifacts.append(art_path)
+                    if "fs.write" not in caps:
+                        caps.insert(0, "fs.write")
+                        reqs.append(distilled_spec.what_user_wants_to_build)
+                    if art.get("parent_dir") and distilled_spec.is_messy_input:
+                        if "fs.mkdir" not in caps:
+                            caps.insert(0, "fs.mkdir")
+                if art_path not in outputs:
+                    outputs.append(art_path)
+            for resolved in distilled_spec.ambiguities_resolved:
+                if resolved not in assumptions:
+                    assumptions.append(resolved)
+
         if not caps:
             if any(
                 w in lower
@@ -348,14 +394,20 @@ class TaskPlanner:
 
         if len(caps) == 1 and caps[0] in ("fs.read", "fs.list", "project.inspect", "memory.store", "memory.retrieve", "model.query", "chat.respond"):
             complexity = "simple_direct"
-        elif len(caps) <= 2 and "capability.develop" not in caps:
+        elif len(caps) <= 2 and "capability.develop" not in caps and len(artifacts) <= 1:
             complexity = "moderate_inspect_act"
         else:
             complexity = "complex_multi_stage"
 
+        main_goal = (
+            distilled_spec.what_user_wants_to_build
+            if (distilled_spec.is_build_intent and distilled_spec.is_messy_input)
+            else instruction
+        )
+
         return InstructionIntent(
             original_instruction=instruction,
-            main_goal=instruction,
+            main_goal=main_goal,
             explicit_requirements=reqs or [f"Accomplish: {instruction}"],
             inferred_requirements=inferred_reqs,
             expected_outputs=outputs or ["task_execution_result"],
@@ -364,6 +416,8 @@ class TaskPlanner:
             relevant_context={
                 "matched_experiences": len(experiences),
                 "matched_memories": len(memories),
+                "is_messy_input": distilled_spec.is_messy_input,
+                "is_build_intent": distilled_spec.is_build_intent,
             },
             required_capabilities=caps,
             assumptions=assumptions,
@@ -381,7 +435,11 @@ class TaskPlanner:
         instruction: str,
         intent: InstructionIntent,
         experiences: List[Dict[str, Any]],
+        distilled_spec: Optional[DistilledBuildSpec] = None,
     ) -> Tuple[List[PlannedAction], List[TaskRequirement]]:
+        if distilled_spec is None:
+            distilled_spec = InstructionDistiller.distill(instruction)
+
         lower = instruction.lower()
         actions: List[PlannedAction] = []
         requirements: List[TaskRequirement] = []
@@ -473,8 +531,201 @@ class TaskPlanner:
                     )
                 )
 
-        # 2. Check for file creation / writing instructions
-        if "fs.write" in intent.required_capabilities and intent.target_artifacts:
+        # 2. Check for multi-artifact or messy-input build specification via InstructionDistiller
+        use_distilled_build = bool(
+            distilled_spec
+            and distilled_spec.is_build_intent
+            and (
+                distilled_spec.is_messy_input
+                or len(distilled_spec.target_artifacts) > 1
+                or len(distilled_spec.extracted_functions) > 1
+            )
+            and "```" not in instruction
+            and not re.search(r"(?:with content|containing)\s+['\"]", instruction, re.IGNORECASE)
+        )
+
+        if use_distilled_build and distilled_spec is not None:
+            created_dirs: set[str] = set()
+            for art in distilled_spec.target_artifacts:
+                p_dir = art.get("parent_dir")
+                if p_dir and p_dir not in created_dirs and p_dir != ".":
+                    created_dirs.add(p_dir)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Create directory '{p_dir}'",
+                            capability_id="fs.mkdir",
+                            parameters={"path": p_dir, "parents": True},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-dir-{p_dir}",
+                            description=f"Directory '{p_dir}' exists",
+                            category="directory_exists",
+                            target=p_dir,
+                        )
+                    )
+                if art["artifact_type"] == "directory" and art["path"] not in created_dirs:
+                    d_path = art["path"]
+                    created_dirs.add(d_path)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Create directory '{d_path}'",
+                            capability_id="fs.mkdir",
+                            parameters={"path": d_path, "parents": True},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-dir-{d_path}",
+                            description=f"Directory '{d_path}' exists",
+                            category="directory_exists",
+                            target=d_path,
+                        )
+                    )
+
+            primary_py_art = next(
+                (a for a in distilled_spec.target_artifacts if a["artifact_type"] == "python_module"),
+                None,
+            )
+
+            for idx, art in enumerate(distilled_spec.target_artifacts):
+                atype = art["artifact_type"]
+                if atype == "directory":
+                    continue
+                t_file = art["path"]
+                if atype == "python_module":
+                    code_text, fns = InstructionDistiller.synthesize_python_module(
+                        art, instruction
+                    )
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Write Python module '{t_file}' implementing {', '.join(fns)}",
+                            capability_id="fs.write",
+                            parameters={"path": t_file, "content": code_text},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-file-{idx + 1}",
+                            description=f"File '{t_file}' exists in workspace",
+                            category="file_exists",
+                            target=t_file,
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-compile-{idx + 1}",
+                            description=f"Python file '{t_file}' compiles without syntax errors",
+                            category="code_compiles",
+                            target=t_file,
+                        )
+                    )
+                    for fn_name in fns:
+                        requirements.append(
+                            TaskRequirement(
+                                requirement_id=f"req-fn-{idx + 1}-{fn_name}",
+                                description=f"Function '{fn_name}' is defined in '{t_file}'",
+                                category="function_exists",
+                                target=t_file,
+                                expected=fn_name,
+                            )
+                        )
+                elif atype == "python_test":
+                    mod_ref = primary_py_art or art
+                    test_code = InstructionDistiller.synthesize_python_test(art, mod_ref)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Write unit test suite '{t_file}'",
+                            capability_id="fs.write",
+                            parameters={"path": t_file, "content": test_code},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-file-{idx + 1}",
+                            description=f"Test file '{t_file}' exists in workspace",
+                            category="file_exists",
+                            target=t_file,
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-compile-{idx + 1}",
+                            description=f"Test file '{t_file}' compiles without syntax errors",
+                            category="code_compiles",
+                            target=t_file,
+                        )
+                    )
+                elif atype == "json_config":
+                    json_text = InstructionDistiller.synthesize_json_config(art, distilled_spec)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Write JSON configuration '{t_file}'",
+                            capability_id="fs.write",
+                            parameters={"path": t_file, "content": json_text},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-file-{idx + 1}",
+                            description=f"JSON file '{t_file}' exists in workspace",
+                            category="file_exists",
+                            target=t_file,
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-json-{idx + 1}",
+                            description=f"JSON file '{t_file}' is valid JSON",
+                            category="json_valid",
+                            target=t_file,
+                        )
+                    )
+                elif atype == "markdown_doc":
+                    md_text = InstructionDistiller.synthesize_markdown_doc(art, distilled_spec)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Write Markdown documentation '{t_file}'",
+                            capability_id="fs.write",
+                            parameters={"path": t_file, "content": md_text},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-file-{idx + 1}",
+                            description=f"Documentation file '{t_file}' exists in workspace",
+                            category="file_exists",
+                            target=t_file,
+                        )
+                    )
+                else:
+                    content, _ = self._extract_file_content_from_instruction(instruction, t_file)
+                    actions.append(
+                        PlannedAction(
+                            step_id=next_step_id(),
+                            description=f"Write file '{t_file}'",
+                            capability_id="fs.write",
+                            parameters={"path": t_file, "content": content},
+                        )
+                    )
+                    requirements.append(
+                        TaskRequirement(
+                            requirement_id=f"req-file-{idx + 1}",
+                            description=f"File '{t_file}' exists in workspace",
+                            category="file_exists",
+                            target=t_file,
+                        )
+                    )
+
+        # 2b. Standard single-file creation / writing instructions
+        elif "fs.write" in intent.required_capabilities and intent.target_artifacts:
             target_file = intent.target_artifacts[0]
             content, func_name = self._extract_file_content_from_instruction(
                 instruction, target_file
@@ -534,8 +785,8 @@ class TaskPlanner:
                     )
                 )
 
-        # 3. Check for directory creation
-        if "fs.mkdir" in intent.required_capabilities:
+        # 3. Check for directory creation (when not already created by distilled build)
+        if "fs.mkdir" in intent.required_capabilities and not use_distilled_build:
             dir_match = re.search(
                 r"(?:directory|folder|mkdir)\s+['\"`]?([a-zA-Z0-9_\-\./]+)['\"`]?",
                 instruction,
@@ -600,7 +851,16 @@ class TaskPlanner:
 
         # 6. Check for test execution
         if "test.run" in intent.required_capabilities:
-            target_test = intent.target_artifacts[0] if intent.target_artifacts else "tests"
+            test_artifacts = [
+                a
+                for a in intent.target_artifacts
+                if Path(a).name.startswith("test_") or Path(a).name.endswith("_test.py")
+            ]
+            target_test = (
+                test_artifacts[0]
+                if test_artifacts
+                else (intent.target_artifacts[0] if intent.target_artifacts else "tests")
+            )
             runner = "pytest" if "pytest" in lower else "unittest"
             actions.append(
                 PlannedAction(

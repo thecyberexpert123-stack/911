@@ -204,6 +204,36 @@ class ImprovementStatus(str, Enum):
 
 
 @dataclass
+class DistilledBuildSpec:
+    """
+    Concrete specification distilled from potentially messy, informal, or unstructured
+    user writings so the agent can identify and execute what the user wants to build.
+    """
+
+    raw_input: str
+    is_messy_input: bool = False
+    is_build_intent: bool = False
+    what_user_wants_to_build: str = ""
+    concrete_instruction: str = ""
+    concrete_steps: List[str] = field(default_factory=list)
+    target_artifacts: List[Dict[str, Any]] = field(default_factory=list)
+    extracted_functions: List[str] = field(default_factory=list)
+    extracted_features: List[str] = field(default_factory=list)
+    ambiguities_resolved: List[str] = field(default_factory=list)
+    noise_filtered: List[str] = field(default_factory=list)
+    distilled_by: str = "heuristic_distiller"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> DistilledBuildSpec:
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
+
+
+@dataclass
 class InstructionIntent:
     """Structured representation of a user's instruction distinguishing explicit vs inferred."""
 
@@ -708,6 +738,7 @@ class TaskState:
     original_instruction: str
     interpreted_objective: str = ""
     intent: Optional[InstructionIntent] = None
+    distilled_spec: Optional[DistilledBuildSpec] = None
     requirements: List[TaskRequirement] = field(default_factory=list)
     assumptions: List[str] = field(default_factory=list)
     selected_strategy: str = ProblemSolvingStrategy.DIRECT_EXECUTION.value
@@ -793,6 +824,7 @@ class TaskState:
             "original_instruction": self.original_instruction,
             "interpreted_objective": self.interpreted_objective,
             "intent": self.intent.to_dict() if self.intent else None,
+            "distilled_spec": self.distilled_spec.to_dict() if self.distilled_spec else None,
             "requirements": [r.to_dict() for r in self.requirements],
             "assumptions": list(self.assumptions),
             "selected_strategy": self.selected_strategy,
@@ -832,6 +864,9 @@ class TaskState:
             original_instruction=data["original_instruction"],
             interpreted_objective=data.get("interpreted_objective", ""),
             intent=InstructionIntent.from_dict(data["intent"]) if data.get("intent") else None,
+            distilled_spec=DistilledBuildSpec.from_dict(data["distilled_spec"])
+            if data.get("distilled_spec")
+            else None,
             requirements=[TaskRequirement.from_dict(r) for r in data.get("requirements", [])],
             assumptions=list(data.get("assumptions", [])),
             selected_strategy=data.get(
