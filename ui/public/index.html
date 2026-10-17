@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent 911 — Instruction-Driven AI Agent Chat & Operations Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">911</div>
+        <div>
+          <h1 class="brand-title">AGENT 911</h1>
+          <p class="brand-subtitle">Instruction-Driven, Self-Expanding AI Agent</p>
+        </div>
+      </div>
+
+      <div class="status-strip">
+        <div class="status-pill" id="connectivity-pill" title="Real AI Model Provider Connectivity">
+          <span class="dot" id="connectivity-dot"></span>
+          <span id="connectivity-label">Checking model...</span>
+        </div>
+        <div class="status-pill" id="caps-pill" title="Operational Capabilities">
+          <span id="caps-count-label">--/-- Capabilities</span>
+        </div>
+        <div class="status-pill" id="memory-pill" title="SQLite Persistent Memories & Experiences">
+          <span id="memory-count-label">0 Memories | 0 Experiences</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="open-config-btn" type="button">
+          Model &amp; Config
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="main-layout">
+      <!-- Left Sidebar Navigation & Quick State -->
+      <aside class="sidebar">
+        <nav class="nav-tabs" role="tablist">
+          <button class="nav-tab active" data-tab="chat" type="button">
+            Chat &amp; Task Execution
+          </button>
+          <button class="nav-tab" data-tab="tasks" type="button">
+            Execution History
+          </button>
+          <button class="nav-tab" data-tab="capabilities" type="button">
+            Capabilities &amp; Growth
+          </button>
+          <button class="nav-tab" data-tab="memory" type="button">
+            Memory &amp; Experience
+          </button>
+          <button class="nav-tab" data-tab="models" type="button">
+            Models &amp; Providers
+          </button>
+          <button class="nav-tab" data-tab="improvements" type="button">
+            Adaptive Self-Improvement
+          </button>
+        </nav>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span>Quick Instructions</span>
+          </div>
+          <div class="quick-prompts">
+            <button class="quick-prompt-btn" data-prompt="Inspect project structure, manifests, entry points, and tests">
+              Inspect Project Structure
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Write a Python file 'fibonacci_tool.py' with a function 'compute_fibonacci'">
+              Create &amp; Live-Test Python Module
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Develop capability 'text.metrics' to count words, lines, and characters">
+              Grow Capability: text.metrics
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Remember that deployment.environment = production_linux">
+              Store Factual Memory in SQLite
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Run automated tests on 'tests' with unittest">
+              Run Automated Test Suite
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-section sidebar-tasks-mini">
+          <div class="sidebar-section-header">
+            <span>Recent Tasks (SQLite)</span>
+            <button class="btn-link" id="refresh-sidebar-btn" type="button">Refresh</button>
+          </div>
+          <div id="recent-tasks-list" class="recent-tasks-list">
+            <div class="empty-hint">No tasks executed yet.</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Content Area -->
+      <main class="content-area">
+        <!-- TAB 1: Chat & Task Console -->
+        <section class="tab-panel active" id="tab-chat">
+          <div class="chat-stream" id="chat-stream">
+            <div class="chat-msg assistant-msg">
+              <div class="msg-header">
+                <span class="msg-author">Agent 911 Orchestrator</span>
+                <span class="msg-meta">Direct Execution Lifecycle • Verification + Live Run Testing</span>
+              </div>
+              <div class="msg-body">
+                <p>
+                  Submit any natural-language instruction below. Every task executes through the real
+                  <strong>Agent 911</strong> pipeline (Intent Understanding &rarr; Context &amp; Memory Retrieval &rarr;
+                  Task Planning &rarr; Capability Execution &amp; Targeted Recovery &rarr;
+                  <strong>Verification</strong> &rarr; <strong>Live Run Testing</strong> &rarr; Outcome Classification &rarr;
+                  Experience Persistence).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form class="chat-composer" id="chat-form">
+            <textarea
+              id="chat-input"
+              rows="2"
+              placeholder="Enter an instruction for Agent 911 (e.g., Write a Python file 'stats_helper.py' with a function 'summarize_numbers')..."
+              required
+            ></textarea>
+            <div class="composer-actions">
+              <span class="composer-hint" id="composer-status">Ready • Press Enter to execute (Shift+Enter for newline)</span>
+              <button class="btn btn-primary" id="chat-submit-btn" type="submit">
+                Execute Instruction
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- TAB 2: Execution History & Detailed Task Inspector -->
+        <section class="tab-panel" id="tab-tasks">
+          <div class="panel-split">
+            <div class="panel-list-col">
+              <div class="panel-header">
+                <h2>Persisted Tasks</h2>
+                <button class="btn btn-secondary btn-sm" id="reload-tasks-btn" type="button">Reload</button>
+              </div>
+              <div id="tasks-table-container" class="scrollable-list"></div>
+            </div>
+            <div class="panel-detail-col">
+              <div class="panel-header">
+                <h2>Task Execution &amp; Evaluation Inspector</h2>
+              </div>
+              <div id="task-inspector-detail" class="scrollable-detail">
+                <div class="empty-hint">Select a task from the list to inspect its planned steps, intermediate outputs, Verification checks, Live Run Testing records, and execution logs.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: Capabilities Registry & Organic Capability Growth -->
+        <section class="tab-panel" id="tab-capabilities">
+          <div class="panel-split">
+            <div class="panel-list-col">
+              <div class="panel-header">
+                <h2>Registered Capabilities</h2>
+                <label class="checkbox-inline">
+                  <input type="checkbox" id="filter-available-caps" />
+                  Only AVAILABLE
+                </label>
+              </div>
+              <div id="capabilities-list-container" class="scrollable-list"></div>
+            </div>
+            <div class="panel-detail-col">
+              <div class="panel-header">
+                <h2>Organic Capability Growth (<code>capability.develop</code>)</h2>
+              </div>
+              <div class="scrollable-detail">
+                <p class="section-desc">
+                  Develop a new capability module, verify its AST &amp; interface contract via
+                  <strong>Verification</strong>, exercise it at runtime via <strong>Live Run Testing</strong>,
+                  and register it in SQLite and the active <code>CapabilityRegistry</code>.
+                </p>
+                <form id="grow-capability-form" class="stacked-form">
+                  <label>
+                    <span>Capability Identifier</span>
+                    <input type="text" id="grow-cap-id" placeholder="e.g. data.csv_to_json or hash.compute" required />
+                  </label>
+                  <label>
+                    <span>Capability Name</span>
+                    <input type="text" id="grow-cap-name" placeholder="e.g. CSV to JSON Converter" required />
+                  </label>
+                  <label>
+                    <span>Purpose / Behavior Specification</span>
+                    <input type="text" id="grow-cap-purpose" placeholder="e.g. Convert CSV text to structured JSON rows" required />
+                  </label>
+                  <label>
+                    <span>Optional Python <code>execute(self, params, context)</code> Body</span>
+                    <textarea
+                      id="grow-cap-code"
+                      rows="5"
+                      placeholder="Leave blank to use Agent 911's synthesis engine, or provide custom Python statements returning CapabilityResult(...)"
+                    ></textarea>
+                  </label>
+                  <button type="submit" class="btn btn-primary" id="grow-cap-submit">
+                    Develop, Verify &amp; Live-Test Capability
+                  </button>
+                </form>
+                <div id="grow-capability-result" class="mt-16"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: Persistent Memory & Experience -->
+        <section class="tab-panel" id="tab-memory">
+          <div class="panel-split">
+            <div class="panel-list-col">
+              <div class="panel-header">
+                <h2>SQLite Persistent Memory</h2>
+              </div>
+              <form id="memory-search-form" class="inline-search-bar">
+                <input type="text" id="memory-search-query" placeholder="Search memories by keyword..." />
+                <select id="memory-search-category">
+                  <option value="">All Categories</option>
+                  <option value="FACTUAL">FACTUAL</option>
+                  <option value="INSTRUCTION">INSTRUCTION</option>
+                  <option value="EPISODIC">EPISODIC</option>
+                  <option value="WORKING_STATE">WORKING_STATE</option>
+                </select>
+                <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+              </form>
+
+              <form id="memory-store-form" class="compact-box-form">
+                <h3>Store New Memory</h3>
+                <div class="form-row">
+                  <select id="store-mem-category">
+                    <option value="FACTUAL">FACTUAL</option>
+                    <option value="INSTRUCTION">INSTRUCTION</option>
+                    <option value="WORKING_STATE">WORKING_STATE</option>
+                  </select>
+                  <select id="store-mem-confidence">
+                    <option value="VERIFIED">VERIFIED</option>
+                    <option value="OBSERVED" selected>OBSERVED</option>
+                    <option value="ASSUMPTION">ASSUMPTION</option>
+                  </select>
+                  <input type="text" id="store-mem-key" placeholder="Key (e.g. project.db)" required />
+                </div>
+                <div class="form-row">
+                  <input type="text" id="store-mem-content" placeholder="Memory content..." required />
+                  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                </div>
+              </form>
+
+              <div id="memories-list-container" class="scrollable-list"></div>
+            </div>
+
+            <div class="panel-detail-col">
+              <div class="panel-header">
+                <h2>Recorded Task Experiences &amp; Learned Remedies</h2>
+              </div>
+              <form id="experience-search-form" class="inline-search-bar">
+                <input type="text" id="experience-search-query" placeholder="Search experiences, errors, or remedies..." />
+                <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+              </form>
+              <div id="experiences-list-container" class="scrollable-detail"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 5: Multi-Provider & Multi-Model Configuration & Connection Testing -->
+        <section class="tab-panel" id="tab-models">
+          <div class="panel-split">
+            <div class="panel-list-col">
+              <div class="panel-header">
+                <h2>Configured Providers &amp; Credentials</h2>
+                <button class="btn btn-secondary btn-sm" id="reload-models-tab-btn" type="button">Reload</button>
+              </div>
+              <div class="scrollable-list">
+                <div id="providers-list-container" class="mb-16"></div>
+
+                <form id="provider-upsert-form" class="compact-box-form">
+                  <h3>Add / Update Provider</h3>
+                  <div class="form-row">
+                    <input type="text" id="prov-id" placeholder="Provider ID (e.g. openai_main)" required />
+                    <input type="text" id="prov-name" placeholder="Display Name" required />
+                  </div>
+                  <div class="form-row">
+                    <select id="prov-adapter">
+                      <option value="openai_compatible">openai_compatible</option>
+                      <option value="anthropic">anthropic</option>
+                      <option value="ollama">ollama</option>
+                      <option value="local_only">local_only</option>
+                      <option value="deterministic">deterministic</option>
+                    </select>
+                    <input type="text" id="prov-endpoint" placeholder="https://api.openai.com/v1/chat/completions" required />
+                  </div>
+                  <div class="form-row">
+                    <input type="text" id="prov-env" placeholder="Env var (e.g. OPENAI_API_KEY)" value="AGENT911_API_KEY" />
+                    <input type="password" id="prov-apikey" placeholder="Optional API Key (saved in 0600 vault)" autocomplete="off" />
+                    <button type="submit" class="btn btn-primary btn-sm">Save Provider</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="panel-detail-col">
+              <div class="panel-header">
+                <h2>Model Profiles, Active Selection &amp; Live Connection Test</h2>
+              </div>
+              <div class="scrollable-detail">
+                <div id="connection-test-banner" class="mb-16"></div>
+                <div id="models-list-container" class="mb-16"></div>
+
+                <form id="model-upsert-form" class="compact-box-form">
+                  <h3>Add / Update Model Profile</h3>
+                  <div class="form-row">
+                    <input type="text" id="mod-profile-id" placeholder="Profile ID (e.g. gpt4o-fast)" required />
+                    <input type="text" id="mod-name" placeholder="Display Name" required />
+                  </div>
+                  <div class="form-row">
+                    <input type="text" id="mod-provider-id" placeholder="Provider ID (e.g. default)" required />
+                    <input type="text" id="mod-model-id" placeholder="Provider Model ID (e.g. gpt-4o-mini)" required />
+                  </div>
+                  <div class="form-row">
+                    <input type="number" id="mod-ctx-window" placeholder="Context Window Tokens (optional)" min="256" />
+                    <input type="number" id="mod-temperature" placeholder="Temp (0.0-2.0)" step="0.05" min="0" max="2" value="0.1" />
+                    <input type="number" id="mod-timeout" placeholder="Timeout (s)" step="1" min="1" value="30" />
+                    <button type="submit" class="btn btn-primary btn-sm">Save Model</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 6: Adaptive Self-Improvement & Proposals -->
+        <section class="tab-panel" id="tab-improvements">
+          <div class="panel-header">
+            <div>
+              <h2>Improvement Proposals &amp; Controlled Self-Improvement</h2>
+              <p class="panel-subtitle">
+                Detect recurring operational weaknesses from SQLite execution records, inspect prioritized
+                proposals, and run bounded self-improvement validated by Verification &amp; Live Run Testing
+                with automatic rollback.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-primary btn-sm" id="detect-proposals-btn" type="button">
+                Scan History &amp; Propose Improvements
+              </button>
+              <button class="btn btn-secondary btn-sm" id="refresh-proposals-btn" type="button">
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div id="self-improve-banner" class="config-status-banner" style="display: none; margin-bottom: 1rem;"></div>
+
+          <div class="split-grid">
+            <div class="card">
+              <h3>Prioritized Improvement Proposals</h3>
+              <div id="proposals-list" class="records-list"></div>
+            </div>
+            <div class="card">
+              <h3>Controlled Self-Improvement Run History</h3>
+              <div id="self-improve-runs-list" class="records-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Model & Runtime Configuration Modal -->
+  <div class="modal-backdrop hidden" id="config-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Model &amp; Runtime Configuration</h2>
+        <button class="btn-close" id="close-config-btn" type="button">&times;</button>
+      </div>
+      <form id="config-form" class="stacked-form">
+        <div class="config-status-banner" id="modal-connectivity-banner"></div>
+        <label>
+          <span>Model Provider</span>
+          <select id="cfg-provider">
+            <option value="openai_compatible">openai_compatible</option>
+            <option value="anthropic">anthropic</option>
+            <option value="ollama">ollama</option>
+            <option value="local_only">local_only</option>
+          </select>
+        </label>
+        <label>
+          <span>Model Identifier</span>
+          <input type="text" id="cfg-model-id" required />
+        </label>
+        <label>
+          <span>Model Endpoint URL</span>
+          <input type="text" id="cfg-endpoint" required />
+        </label>
+        <div class="form-grid-2">
+          <label>
+            <span>Timeout (seconds)</span>
+            <input type="number" step="0.5" min="1" id="cfg-timeout" required />
+          </label>
+          <label>
+            <span>Temperature (0.0 - 2.0)</span>
+            <input type="number" step="0.05" min="0" max="2" id="cfg-temperature" required />
+          </label>
+        </div>
+        <div class="form-grid-2">
+          <label>
+            <span>Max Recovery Attempts / Step</span>
+            <input type="number" min="0" max="10" id="cfg-max-recovery" required />
+          </label>
+          <label class="checkbox-block">
+            <input type="checkbox" id="cfg-local-fallback" checked />
+            <span>Allow Local Instruction Planner Fallback</span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancel-config-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save &amp; Check Connectivity</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

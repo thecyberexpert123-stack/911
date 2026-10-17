@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent911"
+version = "0.1.0"
+description = "Agent 911: Instruction-Driven, Self-Expanding AI Agent with Verification and Live Run Testing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Agent 911 Engineering"}
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+agent911 = "agent911.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent911*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
