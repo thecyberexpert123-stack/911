@@ -10,6 +10,49 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function renderConversationalMarkdown(text) {
+  if (!text) return "";
+  const escaped = escapeHtml(text);
+  // Render fenced code blocks first
+  const parts = escaped.split(/```([\s\S]*?)```/g);
+  const renderedParts = parts.map((chunk, idx) => {
+    if (idx % 2 === 1) {
+      return `<div class="code-snippet">${chunk.trim()}</div>`;
+    }
+    // Inline formatting: **bold**, *italic*, `code`
+    let html = chunk
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>");
+
+    // Convert bullet lists and paragraphs
+    const lines = html.split("\n");
+    let out = "";
+    let inList = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("- ")) {
+        if (!inList) {
+          out += "<ul>";
+          inList = true;
+        }
+        out += `<li>${trimmed.slice(2)}</li>`;
+      } else {
+        if (inList) {
+          out += "</ul>";
+          inList = false;
+        }
+        if (trimmed.length > 0) {
+          out += `<p>${trimmed}</p>`;
+        }
+      }
+    }
+    if (inList) out += "</ul>";
+    return out;
+  });
+  return renderedParts.join("");
+}
+
 async function apiRequest(path, options = {}) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -220,51 +263,71 @@ function renderTaskCard(task, showResumeButton = true) {
     `
       : "";
 
+  const isConversational = task.interaction_mode === "conversational";
+  const replyHtml = task.assistant_response
+    ? `<div class="conversational-reply">${renderConversationalMarkdown(task.assistant_response)}</div>`
+    : `<div class="conversational-reply"><p>${escapeHtml(task.outcome_summary)}</p></div>`;
+
   return `
-    <div class="task-card" data-card-task-id="${escapeHtml(task.task_id)}">
-      <div class="task-card-summary">
-        <div>
-          <span class="mono"><strong>${escapeHtml(task.task_id)}</strong></span>
-          <span style="color:var(--text-secondary); margin-left:8px;">Stage: <code>${escapeHtml(task.current_execution_state)}</code></span>
-          <span style="color:var(--text-secondary); margin-left:8px;">Strategy: <code>${escapeHtml(task.selected_strategy || "DIRECT_EXECUTION")}</code></span>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          ${
-            canResume
-              ? `<button class="btn btn-secondary btn-sm resume-task-btn" data-resume-id="${escapeHtml(task.task_id)}" type="button">Resume Task</button>`
-              : ""
-          }
+    <div data-card-task-id="${escapeHtml(task.task_id)}">
+      ${replyHtml}
+
+      <details class="agent-trace-drawer" ${isConversational ? "" : "open"}>
+        <summary>
+          <span>
+            <strong>Agent Execution &amp; Verification Trace</strong>
+            &bull; Mode: <code>${escapeHtml(task.interaction_mode || "task_execution")}</code>
+            &bull; ${actions.length} step(s)
+          </span>
           <span class="badge badge-${escapeHtml(task.final_outcome)}">Outcome: ${escapeHtml(task.final_outcome)}</span>
+        </summary>
+
+        <div class="task-card">
+          <div class="task-card-summary">
+            <div>
+              <span class="mono"><strong>${escapeHtml(task.task_id)}</strong></span>
+              <span style="color:var(--text-secondary); margin-left:8px;">Stage: <code>${escapeHtml(task.current_execution_state)}</code></span>
+              <span style="color:var(--text-secondary); margin-left:8px;">Strategy: <code>${escapeHtml(task.selected_strategy || "DIRECT_EXECUTION")}</code></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              ${
+                canResume
+                  ? `<button class="btn btn-secondary btn-sm resume-task-btn" data-resume-id="${escapeHtml(task.task_id)}" type="button">Resume Task</button>`
+                  : ""
+              }
+              <span class="badge badge-${escapeHtml(task.final_outcome)}">Outcome: ${escapeHtml(task.final_outcome)}</span>
+            </div>
+          </div>
+
+          <div style="color: var(--text-primary); font-weight: 500;">
+            ${escapeHtml(task.outcome_summary)}
+          </div>
+
+          ${decisionsHtml}
+
+          <div class="task-section">
+            <h4>Planned &amp; Executed Actions (${actions.length})</h4>
+            ${stepsHtml || `<div class="empty-hint">No actions planned.</div>`}
+          </div>
+
+          ${errorsHtml}
+
+          <div class="task-section">
+            <h4>Formal Evaluation Mechanism 1: Verification (${verifications.length})</h4>
+            ${verifHtml || `<div class="empty-hint">No verification checks recorded.</div>`}
+          </div>
+
+          <div class="task-section">
+            <h4>Formal Evaluation Mechanism 2: Live Run Testing (${liveTests.length})</h4>
+            ${liveHtml || `<div class="empty-hint">No live run tests recorded.</div>`}
+          </div>
+
+          <div class="mono" style="font-size: 11px; color: var(--text-secondary);">
+            Associated Experience ID(s): ${escapeHtml((task.associated_experience_ids || []).join(", ") || "none")}
+            • Resource Metrics: ${escapeHtml(JSON.stringify(task.resource_metrics || {}))}
+          </div>
         </div>
-      </div>
-
-      <div style="color: var(--text-primary); font-weight: 500;">
-        ${escapeHtml(task.outcome_summary)}
-      </div>
-
-      ${decisionsHtml}
-
-      <div class="task-section">
-        <h4>Planned &amp; Executed Actions (${actions.length})</h4>
-        ${stepsHtml || `<div class="empty-hint">No actions planned.</div>`}
-      </div>
-
-      ${errorsHtml}
-
-      <div class="task-section">
-        <h4>Formal Evaluation Mechanism 1: Verification (${verifications.length})</h4>
-        ${verifHtml || `<div class="empty-hint">No verification checks recorded.</div>`}
-      </div>
-
-      <div class="task-section">
-        <h4>Formal Evaluation Mechanism 2: Live Run Testing (${liveTests.length})</h4>
-        ${liveHtml || `<div class="empty-hint">No live run tests recorded.</div>`}
-      </div>
-
-      <div class="mono" style="font-size: 11px; color: var(--text-secondary);">
-        Associated Experience ID(s): ${escapeHtml((task.associated_experience_ids || []).join(", ") || "none")}
-        • Resource Metrics: ${escapeHtml(JSON.stringify(task.resource_metrics || {}))}
-      </div>
+      </details>
     </div>
   `;
 }

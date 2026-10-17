@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from agent911.capabilities.base import Capability, CapabilityContext
+from agent911.capabilities.chat_ops import ChatRespondCapability
 from agent911.capabilities.command_execution import RunCommandCapability
 from agent911.capabilities.experience_ops import (
     RecordExperienceCapability,
@@ -65,6 +66,7 @@ def register_builtin_capabilities(
         CheckModelConnectivityCapability(),
         QueryModelCapability(),
         DevelopCapability(),
+        ChatRespondCapability(),
     ]
     for cap in builtins:
         registry.register(cap, allow_replace=True)

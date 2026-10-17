@@ -730,6 +730,8 @@ class TaskState:
     resource_metrics: Dict[str, Any] = field(default_factory=dict)
     final_outcome: TaskOutcome = TaskOutcome.UNVERIFIED
     outcome_summary: str = ""
+    assistant_response: str = ""
+    interaction_mode: str = "task_execution"
     associated_experience_ids: List[str] = field(default_factory=list)
     decisions: List[str] = field(default_factory=list)
     context_summary: Optional[str] = None
@@ -814,6 +816,8 @@ class TaskState:
             "resource_metrics": dict(self.resource_metrics),
             "final_outcome": self.final_outcome.value,
             "outcome_summary": self.outcome_summary,
+            "assistant_response": self.assistant_response,
+            "interaction_mode": self.interaction_mode,
             "associated_experience_ids": list(self.associated_experience_ids),
             "decisions": list(self.decisions),
             "context_summary": self.context_summary,
@@ -866,6 +870,8 @@ class TaskState:
                 data.get("final_outcome", TaskOutcome.UNVERIFIED.value)
             ),
             outcome_summary=data.get("outcome_summary", ""),
+            assistant_response=data.get("assistant_response", ""),
+            interaction_mode=data.get("interaction_mode", "task_execution"),
             associated_experience_ids=list(data.get("associated_experience_ids", [])),
             decisions=list(data.get("decisions", [])),
             context_summary=data.get("context_summary"),

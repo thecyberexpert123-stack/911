@@ -272,4 +272,42 @@ describe("Agent 911 Node.js Chat Interface Server", () => {
     assert.equal(imprBody.data.run.verification_status, "PASSED");
     assert.equal(imprBody.data.run.live_test_status, "PASSED");
   });
+
+  it("supports both natural conversational chatting and autonomous instruction execution via /api/chat", async () => {
+    // 1. Conversational turn: introduce user
+    const r1 = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: "Hello! My name is Aryan" }),
+    });
+    assert.equal(r1.status, 200);
+    const b1 = await r1.json();
+    assert.equal(b1.ok, true);
+    assert.equal(b1.data.interaction_mode, "conversational");
+    assert.ok(b1.data.assistant_response.includes("Aryan"));
+
+    // 2. Conversational recall turn: ask "What is my name?"
+    const r2 = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: "What is my name?" }),
+    });
+    assert.equal(r2.status, 200);
+    const b2 = await r2.json();
+    assert.equal(b2.ok, true);
+    assert.equal(b2.data.interaction_mode, "conversational");
+    assert.ok(b2.data.assistant_response.includes("Aryan"));
+
+    // 3. Autonomous task instruction turn: inspect workspace
+    const r3 = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: "Inspect project structure" }),
+    });
+    assert.equal(r3.status, 200);
+    const b3 = await r3.json();
+    assert.equal(b3.ok, true);
+    assert.equal(b3.data.interaction_mode, "task_execution");
+    assert.ok(b3.data.assistant_response.includes("project files"));
+  });
 });

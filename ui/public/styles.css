@@ -717,3 +717,56 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+
+/* Conversational Reply Bubble & Collapsible Agent Trace */
+.conversational-reply {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.conversational-reply p {
+  margin: 0 0 8px 0;
+}
+
+.conversational-reply p:last-child {
+  margin-bottom: 0;
+}
+
+.conversational-reply ul {
+  margin: 6px 0 10px 20px;
+}
+
+.conversational-reply li {
+  margin-bottom: 4px;
+}
+
+.agent-trace-drawer {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+}
+
+.agent-trace-drawer > summary {
+  cursor: pointer;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background-color: var(--bg-elevated);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.agent-trace-drawer > summary:hover {
+  color: var(--text-primary);
+}
+
+.agent-trace-drawer > .task-card {
+  padding: 10px;
+}
+

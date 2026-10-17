@@ -546,6 +546,7 @@ class Agent911Orchestrator:
         # Result Classification
         task.transition_to(TaskLifecycleStage.CLASSIFYING)
         OutcomeClassifier.classify(task)
+        self._populate_assistant_response(task)
 
         # Update usefulness feedback for retrieved experiences (Section 5.4)
         applied_proactive_exp = any(
@@ -694,6 +695,107 @@ class Agent911Orchestrator:
             return "none"
         text = json.dumps(data, default=str)
         return text if len(text) <= 240 else text[:240] + "..."
+
+    def _populate_assistant_response(self, task: TaskState) -> None:
+        """
+        Synthesize a natural, conversational assistant_response for both pure chat
+        interactions ('chat.respond') and autonomous task executions.
+        """
+        caps = [a.capability_id for a in task.planned_actions]
+        has_chat = "chat.respond" in caps
+        has_tools = any(c != "chat.respond" for c in caps)
+
+        if has_chat and not has_tools:
+            task.interaction_mode = "conversational"
+        elif has_chat and has_tools:
+            task.interaction_mode = "hybrid"
+        else:
+            task.interaction_mode = "task_execution"
+
+        parts: List[str] = []
+        for act in task.planned_actions:
+            out = task.relevant_outputs.get(act.step_id)
+            cid = act.capability_id
+            if cid == "chat.respond" and isinstance(out, dict) and out.get("reply"):
+                parts.append(str(out["reply"]))
+            elif cid in ("fs.write", "fs.update") and isinstance(out, dict):
+                p = out.get("path", act.parameters.get("path", "file"))
+                sz = out.get("bytes_written", "")
+                verb = "Created and wrote" if cid == "fs.write" else "Updated"
+                parts.append(f"{verb} **`{p}`**" + (f" ({sz} bytes)." if sz != "" else "."))
+            elif cid == "fs.read" and isinstance(out, dict):
+                p = out.get("path", act.parameters.get("path", "file"))
+                content = str(out.get("content", ""))
+                preview = content if len(content) <= 600 else content[:600] + "\n... (truncated)"
+                parts.append(f"Here is the content of **`{p}`**:\n```\n{preview}\n```")
+            elif cid == "fs.list" and isinstance(out, dict):
+                p = out.get("path", ".")
+                entries = out.get("entries", [])
+                names = [e.get("name", str(e)) if isinstance(e, dict) else str(e) for e in entries[:25]]
+                parts.append(
+                    f"Listed directory **`{p}`** ({len(entries)} entries): "
+                    + (", ".join(f"`{n}`" for n in names) if names else "empty")
+                )
+            elif cid == "project.inspect" and isinstance(out, dict):
+                pfiles = out.get("project_files", [])
+                manifests = out.get("manifests", [])
+                tests = out.get("test_files", [])
+                parts.append(
+                    f"I inspected the workspace project structure: found **{len(pfiles)} project files**, "
+                    f"**{len(manifests)} manifest(s)** ({', '.join(f'`{m}`' for m in manifests[:5]) or 'none'}), "
+                    f"and **{len(tests)} test file(s)** ({', '.join(f'`{t}`' for t in tests[:5]) or 'none'})."
+                )
+            elif cid == "test.run" and isinstance(out, dict):
+                passed = out.get("passed", act.status == ActionStatus.COMPLETED)
+                runner = out.get("runner", "test runner")
+                parts.append(
+                    f"Executed test suite via **`{runner}`**: **{'PASSED' if passed else 'FAILED'}**."
+                )
+            elif cid == "cmd.run" and isinstance(out, dict):
+                rc = out.get("exit_code", 0)
+                stdout = str(out.get("stdout", "")).strip()
+                msg = f"Executed command (exit code `{rc}`)."
+                if stdout:
+                    msg += f"\n```\n{stdout[:400]}\n```"
+                parts.append(msg)
+            elif cid == "memory.store" and isinstance(out, dict):
+                k = out.get("key", act.parameters.get("key", ""))
+                v = out.get("content", act.parameters.get("content", ""))
+                parts.append(f"Saved to persistent SQLite memory: **`{k}`** = `{v}`.")
+            elif cid == "memory.retrieve" and isinstance(out, dict):
+                recs = out.get("records", [])
+                if recs:
+                    lines = [f"- **{r.get('key')}**: {r.get('content')}" for r in recs[:8]]
+                    parts.append("Retrieved from persistent memory:\n" + "\n".join(lines))
+                else:
+                    parts.append("No matching records were found in persistent memory.")
+            elif cid == "capability.develop" and isinstance(out, dict):
+                cap_id = out.get("capability_id", act.parameters.get("capability_id", ""))
+                parts.append(
+                    f"Developed, verified, live-tested, and registered new capability **`{cap_id}`**."
+                )
+            elif out is not None and act.status == ActionStatus.COMPLETED:
+                parts.append(
+                    f"Completed **`{cid}`**: `{self._summarize_output(out)}`"
+                )
+
+        if not parts:
+            if task.errors:
+                err = task.errors[-1]
+                parts.append(
+                    f"I encountered an issue while executing `{err.capability_id}` (`{err.error_type}`): {err.message}"
+                )
+            else:
+                parts.append(task.outcome_summary)
+        elif task.interaction_mode != "conversational":
+            verif_pass = sum(1 for v in task.verification_results if v.status.value == "PASSED")
+            live_pass = sum(1 for l in task.live_run_results if l.status.value == "PASSED")
+            parts.append(
+                f"\n*(Outcome: **{task.final_outcome.value}** — {verif_pass}/{len(task.verification_results)} Verification checks passed, "
+                f"{live_pass}/{len(task.live_run_results)} Live Run Tests passed.)*"
+            )
+
+        task.assistant_response = "\n\n".join(parts)
 
     # ------------------------------------------------------------------
     # Phase 3: Diagnostics, Capability Gap Analysis, & Controlled Self-Improvement

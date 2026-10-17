@@ -549,6 +549,45 @@ class TestPhase3AdaptiveIntelligence(unittest.TestCase):
         diag_json = json.loads(proc.stdout)
         self.assertEqual(diag_json["task_id"], t_res.task_id)
 
+    def test_09_conversational_chatbot_and_instruction_execution_modes(self) -> None:
+        """
+        Verify Agent 911 acts as both a natural conversational chatbot ('chat.respond')
+        and an autonomous instruction-executing agent with persistent memory across turns.
+        """
+        # 1. Greeting & identity conversation
+        t_hello = self.orchestrator.execute_task("Hello! How are you?")
+        self.assertEqual(t_hello.final_outcome, TaskOutcome.SUCCESS)
+        self.assertEqual(t_hello.interaction_mode, "conversational")
+        self.assertIn("Agent 911", t_hello.assistant_response)
+
+        # 2. Natural user introduction -> automatically saved to SQLite factual memory
+        t_intro = self.orchestrator.execute_task(
+            "My name is Aryan and my role is Systems Engineer"
+        )
+        self.assertEqual(t_intro.final_outcome, TaskOutcome.SUCCESS)
+        self.assertEqual(t_intro.interaction_mode, "conversational")
+        self.assertIn("Aryan", t_intro.assistant_response)
+
+        # 3. Natural recall question in a subsequent turn
+        t_recall = self.orchestrator.execute_task("What is my name?")
+        self.assertEqual(t_recall.final_outcome, TaskOutcome.SUCCESS)
+        self.assertEqual(t_recall.interaction_mode, "conversational")
+        self.assertIn("Aryan", t_recall.assistant_response)
+
+        # 4. Conversational math evaluation
+        t_math = self.orchestrator.execute_task("What is 125 * 8?")
+        self.assertEqual(t_math.final_outcome, TaskOutcome.SUCCESS)
+        self.assertIn("1000", t_math.assistant_response)
+
+        # 5. Concrete workspace instruction execution in the same session -> task_execution mode + natural assistant_response
+        t_exec = self.orchestrator.execute_task(
+            "Write a Python file 'greeter.py' with a function 'greet_user'"
+        )
+        self.assertEqual(t_exec.final_outcome, TaskOutcome.SUCCESS)
+        self.assertEqual(t_exec.interaction_mode, "task_execution")
+        self.assertIn("greeter.py", t_exec.assistant_response)
+        self.assertTrue((self.workspace / "greeter.py").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

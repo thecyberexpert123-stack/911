@@ -18,8 +18,11 @@ def _format_task_report(task: TaskState) -> str:
     lines.append(f"Original Instruction : {task.original_instruction}")
     lines.append(f"Interpreted Objective: {task.interpreted_objective}")
     lines.append(f"Lifecycle Stage      : {task.current_execution_state.value}")
+    lines.append(f"Interaction Mode     : {task.interaction_mode}")
     lines.append(f"Final Outcome        : {task.final_outcome.value}")
     lines.append(f"Outcome Summary      : {task.outcome_summary}")
+    if task.assistant_response:
+        lines.append(f"\n--- Agent 911 Conversational Response ---\n{task.assistant_response}")
 
     if task.decisions:
         lines.append("\n--- Key Decisions & Experience Applied ---")
@@ -115,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Execute a natural-language instruction through the full Agent 911 lifecycle",
     )
     run_parser.add_argument("instruction", help="Natural-language instruction to execute")
+
+    # chat
+    chat_parser = subparsers.add_parser(
+        "chat",
+        help="Talk conversationally with Agent 911 or execute instructions in single-turn or interactive REPL mode",
+    )
+    chat_parser.add_argument("message", nargs="?", help="Message or instruction (omit for interactive REPL)", default=None)
 
     # resume
     resume_parser = subparsers.add_parser(
@@ -319,6 +329,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print(_format_task_report(task))
         return 0 if task.final_outcome == TaskOutcome.SUCCESS else 1
+
+    if cmd == "chat":
+        if args.message:
+            task = orchestrator.execute_task(args.message)
+            if args.json:
+                print(json.dumps(task.to_dict(), indent=2))
+            else:
+                print(f"Agent 911 ({task.interaction_mode}):\n{task.assistant_response}")
+            return 0 if task.final_outcome == TaskOutcome.SUCCESS else 1
+
+        print("=== Agent 911 Interactive Conversational & Execution REPL ===")
+        print("Type any message to chat or any instruction to execute (or 'exit' to quit).")
+        while True:
+            try:
+                user_msg = input("\nYou > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nGoodbye!")
+                break
+            if not user_msg:
+                continue
+            if user_msg.lower() in ("exit", "quit", ":q"):
+                print("Goodbye!")
+                break
+            task = orchestrator.execute_task(user_msg)
+            print(f"\nAgent 911 [{task.interaction_mode} | {task.final_outcome.value}] >\n{task.assistant_response}")
+        return 0
 
     if cmd == "resume":
         try:

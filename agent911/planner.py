@@ -302,10 +302,26 @@ class TaskPlanner:
             reqs.append("Query configured AI model provider.")
 
         if not caps:
-            caps.append("project.inspect")
-            assumptions.append(
-                "No explicit tool named in instruction; defaulting to workspace inspection."
-            )
+            if any(
+                w in lower
+                for w in (
+                    "inspect",
+                    "analyze",
+                    "discover",
+                    "build",
+                    "audit",
+                    "scan",
+                    "workspace structure",
+                )
+            ):
+                caps.append("project.inspect")
+                assumptions.append(
+                    "No explicit tool named in instruction; defaulting to workspace inspection."
+                )
+            else:
+                caps.append("chat.respond")
+                reqs.append("Respond naturally and helpfully to the user's conversational message.")
+                outputs.append("conversational_reply")
 
         inferred_reqs: List[str] = []
         for art in artifacts:
@@ -330,7 +346,7 @@ class TaskPlanner:
             )
             unknowns.append("Destructive target scope confirmation")
 
-        if len(caps) == 1 and caps[0] in ("fs.read", "fs.list", "project.inspect", "memory.store", "memory.retrieve", "model.query"):
+        if len(caps) == 1 and caps[0] in ("fs.read", "fs.list", "project.inspect", "memory.store", "memory.retrieve", "model.query", "chat.respond"):
             complexity = "simple_direct"
         elif len(caps) <= 2 and "capability.develop" not in caps:
             complexity = "moderate_inspect_act"
@@ -696,10 +712,32 @@ class TaskPlanner:
                 )
             )
 
-        # 10. Check if already-registered custom capability was requested
+        # 10. Conversational response via chat.respond
+        if "chat.respond" in intent.required_capabilities and not any(
+            a.capability_id == "chat.respond" for a in actions
+        ):
+            sid = next_step_id()
+            actions.append(
+                PlannedAction(
+                    step_id=sid,
+                    description="Generate contextual conversational response",
+                    capability_id="chat.respond",
+                    parameters={"message": instruction},
+                )
+            )
+            requirements.append(
+                TaskRequirement(
+                    requirement_id=f"req-chat-{sid}",
+                    description="Conversational agent response generated",
+                    category="output_present",
+                    target=sid,
+                )
+            )
+
+        # 11. Check if already-registered custom capability was requested
         for req_cap in intent.required_capabilities:
             if (
-                req_cap not in ("fs.write", "fs.read", "fs.mkdir", "fs.list", "fs.update", "project.inspect", "test.run", "cmd.run", "memory.store", "memory.retrieve", "capability.develop", "model.query")
+                req_cap not in ("fs.write", "fs.read", "fs.mkdir", "fs.list", "fs.update", "project.inspect", "test.run", "cmd.run", "memory.store", "memory.retrieve", "capability.develop", "model.query", "chat.respond")
                 and self.registry.has(req_cap)
                 and not any(a.capability_id == req_cap for a in actions)
             ):

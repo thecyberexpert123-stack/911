@@ -62,23 +62,29 @@
 
         <div class="sidebar-section">
           <div class="sidebar-section-header">
-            <span>Quick Instructions</span>
+            <span>Chat &amp; Task Quick Prompts</span>
           </div>
           <div class="quick-prompts">
+            <button class="quick-prompt-btn" data-prompt="Hello! Who are you and what can you do?">
+              💬 Say Hello &amp; Ask About Capabilities
+            </button>
+            <button class="quick-prompt-btn" data-prompt="My name is Aryan and my role is AI Engineer">
+              🧠 Introduce Yourself (Save to Memory)
+            </button>
+            <button class="quick-prompt-btn" data-prompt="What is my name and what do you remember about me?">
+              🔍 Ask What Agent 911 Remembers
+            </button>
             <button class="quick-prompt-btn" data-prompt="Inspect project structure, manifests, entry points, and tests">
-              Inspect Project Structure
+              📂 Inspect Project Structure
             </button>
             <button class="quick-prompt-btn" data-prompt="Write a Python file 'fibonacci_tool.py' with a function 'compute_fibonacci'">
-              Create &amp; Live-Test Python Module
+              🐍 Create &amp; Live-Test Python Module
             </button>
             <button class="quick-prompt-btn" data-prompt="Develop capability 'text.metrics' to count words, lines, and characters">
-              Grow Capability: text.metrics
-            </button>
-            <button class="quick-prompt-btn" data-prompt="Remember that deployment.environment = production_linux">
-              Store Factual Memory in SQLite
+              🛠️ Grow Capability: text.metrics
             </button>
             <button class="quick-prompt-btn" data-prompt="Run automated tests on 'tests' with unittest">
-              Run Automated Test Suite
+              ✅ Run Automated Test Suite
             </button>
           </div>
         </div>
@@ -101,16 +107,15 @@
           <div class="chat-stream" id="chat-stream">
             <div class="chat-msg assistant-msg">
               <div class="msg-header">
-                <span class="msg-author">Agent 911 Orchestrator</span>
-                <span class="msg-meta">Direct Execution Lifecycle • Verification + Live Run Testing</span>
+                <span class="msg-author">Agent 911</span>
+                <span class="msg-meta">Conversational AI Agent • Autonomous Execution • Verification + Live Run Testing</span>
               </div>
               <div class="msg-body">
                 <p>
-                  Submit any natural-language instruction below. Every task executes through the real
-                  <strong>Agent 911</strong> pipeline (Intent Understanding &rarr; Context &amp; Memory Retrieval &rarr;
-                  Task Planning &rarr; Capability Execution &amp; Targeted Recovery &rarr;
-                  <strong>Verification</strong> &rarr; <strong>Live Run Testing</strong> &rarr; Outcome Classification &rarr;
-                  Experience Persistence).
+                  Hello! I'm <strong>Agent 911</strong>. You can talk to me like a normal chatbot
+                  (ask questions, share facts for me to remember in SQLite, or discuss your project)
+                  <strong>and</strong> give me concrete instructions to execute in your workspace
+                  (creating/editing files, inspecting projects, running commands &amp; tests, or growing new capabilities).
                 </p>
               </div>
             </div>
@@ -120,13 +125,13 @@
             <textarea
               id="chat-input"
               rows="2"
-              placeholder="Enter an instruction for Agent 911 (e.g., Write a Python file 'stats_helper.py' with a function 'summarize_numbers')..."
+              placeholder="Message Agent 911 — chat naturally (e.g., 'Hello! What can you do?') or give an instruction (e.g., 'Write a Python file calc.py with a function add')..."
               required
             ></textarea>
             <div class="composer-actions">
-              <span class="composer-hint" id="composer-status">Ready • Press Enter to execute (Shift+Enter for newline)</span>
+              <span class="composer-hint" id="composer-status">Ready • Press Enter to send (Shift+Enter for newline)</span>
               <button class="btn btn-primary" id="chat-submit-btn" type="submit">
-                Execute Instruction
+                Send Message
               </button>
             </div>
           </form>
